@@ -2,12 +2,14 @@ package agg
 
 import (
 	"bytes"
+	"context"
 	"log"
 	"net/http"
 	"time"
 
 	"encoding/json"
 
+	"github.com/newrelic/go-agent/v3/newrelic"
 	"github.com/utsavgupta/go-demo/calc"
 )
 
@@ -20,7 +22,7 @@ type ApiAggResponse struct {
 	Results []calc.ApiResponse `json:"results"`
 }
 
-type AsyncCalcRequester func(*calc.ApiRequest, chan calc.ApiResponse)
+type AsyncCalcRequester func(context.Context, *calc.ApiRequest, chan calc.ApiResponse)
 
 func NewAggrHandler(requester AsyncCalcRequester) http.HandlerFunc {
 
@@ -38,10 +40,10 @@ func NewAggrHandler(requester AsyncCalcRequester) http.HandlerFunc {
 		c := make(chan calc.ApiResponse)
 
 		/// Call calc service for all 4 operations
-		go requester(&calc.ApiRequest{Operand1: req.Operand1, Operand2: req.Operand2, Operation: "+"}, c)
-		go requester(&calc.ApiRequest{Operand1: req.Operand1, Operand2: req.Operand2, Operation: "-"}, c)
-		go requester(&calc.ApiRequest{Operand1: req.Operand1, Operand2: req.Operand2, Operation: "*"}, c)
-		go requester(&calc.ApiRequest{Operand1: req.Operand1, Operand2: req.Operand2, Operation: "/"}, c)
+		go requester(r.Context(), &calc.ApiRequest{Operand1: req.Operand1, Operand2: req.Operand2, Operation: "+"}, c)
+		go requester(r.Context(), &calc.ApiRequest{Operand1: req.Operand1, Operand2: req.Operand2, Operation: "-"}, c)
+		go requester(r.Context(), &calc.ApiRequest{Operand1: req.Operand1, Operand2: req.Operand2, Operation: "*"}, c)
+		go requester(r.Context(), &calc.ApiRequest{Operand1: req.Operand1, Operand2: req.Operand2, Operation: "/"}, c)
 
 		results := make([]calc.ApiResponse, 0, 4)
 		timeout := time.After(50 * time.Millisecond)
@@ -63,12 +65,16 @@ func NewAggrHandler(requester AsyncCalcRequester) http.HandlerFunc {
 
 func NewAsyncCalcRequester(client *http.Client) AsyncCalcRequester {
 
-	return func(request *calc.ApiRequest, c chan calc.ApiResponse) {
+	return func(ctx context.Context, request *calc.ApiRequest, c chan calc.ApiResponse) {
 
 		b, _ := json.Marshal(request)
-		br := bytes.NewReader(b)
+		br := bytes.NewBuffer(b)
 
-		resp, err := client.Post("http://localhost:8080/", "appplication/json", br)
+		nrCtx := newrelic.FromContext(ctx)
+		req, _ := http.NewRequest(http.MethodPost, "http://localhost:8080/calc", br)
+		req = newrelic.RequestWithTransactionContext(req, nrCtx)
+
+		resp, err := client.Do(req)
 
 		if err != nil {
 			log.Printf("Could not complete request, error %v", err.Error())

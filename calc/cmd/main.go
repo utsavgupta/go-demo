@@ -20,6 +20,6 @@ func main() {
 	}
 
 	r := http.NewServeMux()
-	r.HandleFunc(newrelic.WrapHandleFunc(app, "/", calc.CalculateHandler))
+	r.HandleFunc(newrelic.WrapHandleFunc(app, "/calc", calc.CalculateHandler))
 	http.ListenAndServe(":8080", r)
 }
