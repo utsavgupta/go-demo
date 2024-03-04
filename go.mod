@@ -1,6 +1,6 @@
 module github.com/utsavgupta/go-demo
 
-go 1.21.0
+go 1.21
 
 require github.com/newrelic/go-agent/v3 v3.30.0
 
